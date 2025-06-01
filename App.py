@@ -1,84 +1,72 @@
+# App.py
 import streamlit as st
 import pandas as pd
-import requests
+import plotly.express as px
 import folium
 from streamlit_folium import st_folium
+from datetime import datetime
+import json
+import os
 
-# Configuración de la página
-st.set_page_config(page_title="Seguridad Ciudadana Sabadell", layout="wide")
+st.set_page_config(page_title="SmartCity Sabadell", layout="wide")
 
-st.title("🔒 Seguridad Ciudadana Sabadell")
+# Cargar datos locales (desde carpeta datasets)
+def cargar_datos():
+    base_path = os.path.join(os.path.dirname(__file__), 'datasets')
 
-# Cargar datos de sensores ambientales
-@st.cache_data
-def cargar_sensores_ambientales():
-    url = "https://opendata.sabadell.cat/dataset/qualitat-aire/resource/ID_DEL_RECURSO/download/qualitat-aire.csv"
-    try:
-        df = pd.read_csv(url)
-        return df
-    except:
-        return pd.DataFrame()
+    with open(os.path.join(base_path, 'obras.json'), 'r', encoding='utf-8') as f:
+        obras = json.load(f)
 
-# Cargar datos de movilidad urbana
-@st.cache_data
-def cargar_mobilitat():
-    url = "https://opendata.sabadell.cat/dataset/mobilitat/resource/ID_DEL_RECURSO/download/mobilitat.csv"
-    try:
-        df = pd.read_csv(url)
-        return df
-    except:
-        return pd.DataFrame()
+    incidentes = pd.read_csv(os.path.join(base_path, 'incidentes.csv'))
 
-# Cargar datos de seguridad ciudadana
-@st.cache_data
-def cargar_seguridad():
-    url = "https://opendata.sabadell.cat/dataset/seguretat-ciutadana/resource/ID_DEL_RECURSO/download/seguretat-ciutadana.csv"
-    try:
-        df = pd.read_csv(url)
-        return df
-    except:
-        return pd.DataFrame()
+    with open(os.path.join(base_path, 'eventos.json'), 'r', encoding='utf-8') as f:
+        eventos = json.load(f)
 
-# Visualizar mapa con datos
-def mostrar_mapa(df, lat_col, lon_col, popup_col):
-    m = folium.Map(location=[41.5463, 2.1086], zoom_start=13)
-    for _, row in df.iterrows():
-        try:
-            folium.Marker(
-                location=[row[lat_col], row[lon_col]],
-                popup=row[popup_col],
-                icon=folium.Icon(color='blue', icon='info-sign')
-            ).add_to(m)
-        except:
-            continue
-    st_folium(m, width=700, height=500)
+    zonas_verdes = pd.read_json(os.path.join(base_path, 'zonas_verdes.geojson'))
 
-# Menú lateral
-menu = st.sidebar.selectbox("Selecciona una opción", ["Sensores Ambientales", "Movilidad Urbana", "Seguridad Ciudadana"])
+    return obras, incidentes, eventos, zonas_verdes
 
-if menu == "Sensores Ambientales":
-    st.header("🌬️ Sensores Ambientales")
-    df_sensores = cargar_sensores_ambientales()
-    if not df_sensores.empty:
-        st.dataframe(df_sensores)
-        mostrar_mapa(df_sensores, 'latitud', 'longitud', 'nom_sensor')
-    else:
-        st.warning("No se pudieron cargar los datos de sensores ambientales.")
+obras, incidentes, eventos, zonas_verdes = cargar_datos()
 
-elif menu == "Movilidad Urbana":
-    st.header("🚌 Movilidad Urbana")
-    df_mobilitat = cargar_mobilitat()
-    if not df_mobilitat.empty:
-        st.dataframe(df_mobilitat)
-        mostrar_mapa(df_mobilitat, 'latitud', 'longitud', 'nom_parada')
-    else:
-        st.warning("No se pudieron cargar los datos de movilidad urbana.")
+st.title("🌆 SmartCity Sabadell - Plataforma de Seguridad y Datos Urbanos")
+st.markdown("""Esta plataforma permite visualizar en tiempo real datos abiertos de Sabadell relacionados con:
+- Incidentes urbanos y de seguridad
+- Obras públicas
+- Eventos
+- Zonas verdes
+""")
 
-elif menu == "Seguridad Ciudadana":
-    st.header("🚓 Seguridad Ciudadana")
-    df_seguridad = cargar_seguridad()
-    if not df_seguridad.empty:
-        st.dataframe(df_seguridad)
-        mostrar_mapa(df_seguridad, 'latitud', 'longitud', 'tipus_incident')
-    else:
-        st.warning("No se pudieron cargar los datos de seguridad ciudadana.")
+# Mapa de obras
+st.subheader("🚧 Obras públicas activas")
+mapa = folium.Map(location=[41.5463, 2.1086], zoom_start=13)
+for o in obras['features']:
+    coords = o['geometry']['coordinates']
+    desc = o['properties'].get('descripcio', 'Obra')
+    folium.Marker(location=[coords[1], coords[0]], tooltip=desc, icon=folium.Icon(color="orange")).add_to(mapa)
+
+st_data = st_folium(mapa, width=800)
+
+# Tabla y análisis de incidentes
+st.subheader("🚒 Estadísticas de incidentes ciudadanos")
+st.dataframe(incidentes)
+
+col1, col2 = st.columns(2)
+with col1:
+    fig1 = px.histogram(incidentes, x='tipo', color='tipo', title='Incidentes por tipo')
+    st.plotly_chart(fig1, use_container_width=True)
+with col2:
+    fig2 = px.line(incidentes.groupby('fecha').size().reset_index(name='conteo'), x='fecha', y='conteo', title='Evolución temporal')
+    st.plotly_chart(fig2, use_container_width=True)
+
+# Eventos
+st.subheader("🎉 Eventos y actividades en Sabadell")
+for ev in eventos['features'][:5]:
+    props = ev['properties']
+    st.markdown(f"- **{props.get('title', 'Evento')}**: {props.get('description', 'Sin descripción')}")
+
+# Zonas verdes
+st.subheader("🌿 Parques y zonas verdes")
+st.map(zonas_verdes)
+
+st.success("Plataforma funcional cargada con datos reales y lista para ampliarse con modelos predictivos y alertas.")
+    
