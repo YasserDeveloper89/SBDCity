@@ -1,72 +1,43 @@
-# App.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import folium
 from streamlit_folium import st_folium
-from datetime import datetime
 import json
-import os
 
-st.set_page_config(page_title="SmartCity Sabadell", layout="wide")
+st.set_page_config(page_title="Sabadell SmartCity", layout="wide")
+st.title("🌐 Plataforma de Control - SmartCity Sabadell")
 
-# Cargar datos locales (desde carpeta datasets)
+# ---------------- Carga de Datos ----------------
 def cargar_datos():
-    base_path = os.path.join(os.path.dirname(__file__), 'datasets')
-
-    with open(os.path.join(base_path, 'obras.json'), 'r', encoding='utf-8') as f:
-        obras = json.load(f)
-
-    incidentes = pd.read_csv(os.path.join(base_path, 'incidentes.csv'))
-
-    with open(os.path.join(base_path, 'eventos.json'), 'r', encoding='utf-8') as f:
-        eventos = json.load(f)
-
-    zonas_verdes = pd.read_json(os.path.join(base_path, 'zonas_verdes.geojson'))
-
+    obras = json.load(open("obras.json", encoding="utf-8"))
+    incidentes = pd.read_csv("incidentes.csv")
+    eventos = json.load(open("eventos.json", encoding="utf-8"))
+    zonas_verdes = json.load(open("zonas_verdes.geojson", encoding="utf-8"))
     return obras, incidentes, eventos, zonas_verdes
 
-obras, incidentes, eventos, zonas_verdes = cargar_datos()
+try:
+    obras, incidentes, eventos, zonas_verdes = cargar_datos()
+except Exception as e:
+    st.error(f"No se pudieron cargar los datos: {e}")
+    st.stop()
 
-st.title("🌆 SmartCity Sabadell - Plataforma de Seguridad y Datos Urbanos")
-st.markdown("""Esta plataforma permite visualizar en tiempo real datos abiertos de Sabadell relacionados con:
-- Incidentes urbanos y de seguridad
-- Obras públicas
-- Eventos
-- Zonas verdes
-""")
+# ---------------- Visualización ----------------
+st.header("🛠️ Obras Activas")
+for o in obras:
+    st.markdown(f"- {o['titulo']} ({o['estado']})")
 
-# Mapa de obras
-st.subheader("🚧 Obras públicas activas")
-mapa = folium.Map(location=[41.5463, 2.1086], zoom_start=13)
-for o in obras['features']:
-    coords = o['geometry']['coordinates']
-    desc = o['properties'].get('descripcio', 'Obra')
-    folium.Marker(location=[coords[1], coords[0]], tooltip=desc, icon=folium.Icon(color="orange")).add_to(mapa)
-
-st_data = st_folium(mapa, width=800)
-
-# Tabla y análisis de incidentes
-st.subheader("🚒 Estadísticas de incidentes ciudadanos")
+st.header("🚨 Últimos Incidentes Reportados")
 st.dataframe(incidentes)
 
-col1, col2 = st.columns(2)
-with col1:
-    fig1 = px.histogram(incidentes, x='tipo', color='tipo', title='Incidentes por tipo')
-    st.plotly_chart(fig1, use_container_width=True)
-with col2:
-    fig2 = px.line(incidentes.groupby('fecha').size().reset_index(name='conteo'), x='fecha', y='conteo', title='Evolución temporal')
-    st.plotly_chart(fig2, use_container_width=True)
+st.header("🎉 Eventos Públicos")
+for e in eventos:
+    st.markdown(f"- {e['nombre']} - {e['fecha']} ({e['ubicacion']})")
 
-# Eventos
-st.subheader("🎉 Eventos y actividades en Sabadell")
-for ev in eventos['features'][:5]:
-    props = ev['properties']
-    st.markdown(f"- **{props.get('title', 'Evento')}**: {props.get('description', 'Sin descripción')}")
-
-# Zonas verdes
-st.subheader("🌿 Parques y zonas verdes")
-st.map(zonas_verdes)
-
-st.success("Plataforma funcional cargada con datos reales y lista para ampliarse con modelos predictivos y alertas.")
-    
+st.header("🗺️ Mapa Interactivo")
+m = folium.Map(location=[41.548, 2.107], zoom_start=14)
+for z in zonas_verdes["features"]:
+    folium.Polygon(z["geometry"]["coordinates"][0], color="green", tooltip=z["properties"]["nombre"]).add_to(m)
+for o in obras:
+    folium.Marker(location=[o["lat"], o["lon"]], tooltip=o["titulo"], icon=folium.Icon(color="orange")).add_to(m)
+st_folium(m, width=1000, height=500)
