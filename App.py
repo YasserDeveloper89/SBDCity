@@ -1,129 +1,87 @@
 import streamlit as st
 import requests
 import pandas as pd
-import folium
-from streamlit_folium import st_folium
 
-st.set_page_config(layout="wide", page_title="SBD City - Smart City Sabadell")
+st.set_page_config(page_title="SBDCity - Datos Abiertos de Sabadell", layout="wide")
 
-st.title("🌐 SBD City - Plataforma de Datos Urbanos de Sabadell")
+st.title("🌐 SBDCity - Plataforma de Datos Abiertos de Sabadell")
+st.markdown("Esta aplicación muestra información en tiempo real desde fuentes públicas para Sabadell.")
 
-st.markdown("Esta plataforma recoge y visualiza datos públicos en tiempo real para seguridad, transporte, medio ambiente y más en Sabadell.")
+@st.cache_data
+def cargar_datos():
+    datos = {}
 
-# -----------------------------
-# FUNCIONES DE CARGA DE DATOS
-# -----------------------------
-
-@st.cache_data(ttl=3600)
-def cargar_datos_api():
-    data = {}
-
+    # 1. Open Data Sabadell - Lista de datasets
     try:
-        # 1. Calidad del aire - Generalitat
-        aire_url = "https://analisi.transparenciacatalunya.cat/resource/tasf-thgu.json?$limit=1000"
-        aire_data = requests.get(aire_url).json()
-        df_aire = pd.DataFrame(aire_data)
-        df_aire = df_aire[df_aire["municipi_nom"] == "Sabadell"]
-        data["aire"] = df_aire
+        url_sabadell = "https://opendata.sabadell.cat/api/3/action/package_list"
+        response = requests.get(url_sabadell)
+        response.raise_for_status()
+        datos["sabadell"] = response.json()
     except Exception as e:
-        data["aire"] = None
-        st.warning("⚠️ No se pudo cargar la calidad del aire.")
+        st.error(f"Error al cargar datos de Open Data Sabadell: {e}")
+        datos["sabadell"] = None
 
+    # 2. Generalitat de Catalunya - Calidad del aire
     try:
-        # 2. Transporte público - AMB
-        tmb_url = "https://api.tmb.cat/v1/transit/linies/bus"
-        # No usamos token, asumimos un ejemplo (esto puede ajustarse a otras fuentes abiertas reales sin auth)
-        tmb_data = requests.get("https://opendata-ajuntament.barcelona.cat/data/api/action/datastore_search?resource_id=76f1f8d5-daa7-4a4c-a63e-1e2b8e63b1a4&limit=100").json()
-        df_tmb = pd.DataFrame(tmb_data["result"]["records"])
-        data["transporte"] = df_tmb
-    except Exception:
-        data["transporte"] = None
-        st.warning("⚠️ No se pudo cargar la información de transporte público.")
+        url_aire = "https://analisi.transparenciacatalunya.cat/resource/7rq3-m6zv.json?$limit=100"
+        response = requests.get(url_aire)
+        response.raise_for_status()
+        datos["aire"] = response.json()
+    except Exception as e:
+        st.error(f"Error al cargar datos de calidad del aire: {e}")
+        datos["aire"] = None
 
+    # 3. Idescat - Datos de Sabadell
     try:
-        # 3. Datos IDESCAT - Población, vivienda, economía
-        idescat_url = "https://api.idescat.cat/emex/v1/dades.json?id=08202"
-        idescat_data = requests.get(idescat_url).json()
-        data["idescat"] = idescat_data
-    except Exception:
-        data["idescat"] = None
-        st.warning("⚠️ No se pudo cargar la información estadística municipal.")
+        url_idescat = "https://api.idescat.cat/emex/v1/dades.json?lang=es&id=08202"
+        response = requests.get(url_idescat)
+        response.raise_for_status()
+        datos["idescat"] = response.json()
+    except Exception as e:
+        st.error(f"Error al cargar datos de Idescat: {e}")
+        datos["idescat"] = None
 
+    # 4. AMB - Transporte público
     try:
-        # 4. Incidentes o eventos públicos (simulado con eventos)
-        eventos_url = "https://analisi.transparenciacatalunya.cat/resource/qh7u-hdsk.json?$limit=1000"
-        eventos_data = requests.get(eventos_url).json()
-        df_eventos = pd.DataFrame(eventos_data)
-        df_eventos = df_eventos[df_eventos["municipi"] == "Sabadell"]
-        data["eventos"] = df_eventos
-    except Exception:
-        data["eventos"] = None
-        st.warning("⚠️ No se pudo cargar la información de eventos.")
+        url_amb = "https://opendata.amb.cat/api/3/action/package_list"
+        response = requests.get(url_amb)
+        response.raise_for_status()
+        datos["amb"] = response.json()
+    except Exception as e:
+        st.error(f"Error al cargar datos de AMB: {e}")
+        datos["amb"] = None
 
+    # 5. Datos.gob.es - Catálogo de datos
     try:
-        # 5. Catálogo Open Data Sabadell
-        catalogo_url = "https://opendata-ajuntament.sabadell.cat/data/api/3/action/package_list"
-        catalogo_data = requests.get(catalogo_url).json()
-        data["catalogo"] = catalogo_data["result"]
-    except Exception:
-        data["catalogo"] = None
-        st.warning("⚠️ No se pudo cargar el catálogo de datasets.")
+        url_datosgob = "https://datos.gob.es/apidata/catalog/dataset"
+        response = requests.get(url_datosgob)
+        response.raise_for_status()
+        datos["datosgob"] = response.json()
+    except Exception as e:
+        st.error(f"Error al cargar datos de datos.gob.es: {e}")
+        datos["datosgob"] = None
 
-    return data
+    return datos
 
-datos = cargar_datos_api()
+datos = cargar_datos()
 
-# -----------------------------
-# VISUALIZACIONES
-# -----------------------------
+if datos["sabadell"]:
+    st.subheader("📦 Datasets disponibles en Open Data Sabadell")
+    st.json(datos["sabadell"])
 
-st.subheader("📊 Calidad del Aire en Sabadell")
-if datos["aire"] is not None and not datos["aire"].empty:
-    st.dataframe(datos["aire"][["codi_captador", "magnitud", "valor", "unitats", "hora", "data"]].sort_values("data", ascending=False).head(10))
-else:
-    st.info("Sin datos recientes de calidad del aire.")
+if datos["aire"]:
+    st.subheader("🌫 Calidad del aire - Generalitat de Catalunya")
+    df_aire = pd.DataFrame(datos["aire"])
+    st.dataframe(df_aire)
 
-st.subheader("🚍 Transporte Público (AMB/TMB)")
-if datos["transporte"] is not None and not datos["transporte"].empty:
-    st.dataframe(datos["transporte"][["linia", "nomlinia", "sentit", "origen", "desti"]].head(10))
-else:
-    st.info("Sin datos de transporte público disponibles.")
-
-st.subheader("📈 Estadísticas de Sabadell (IDESCAT)")
 if datos["idescat"]:
-    estats = datos["idescat"]["fitxes"]
-    for estat in estats[:5]:
-        st.write(f"📌 {estat['titol']}: {estat['valor']} {estat.get('unitat', '')}")
-else:
-    st.info("No se encontraron estadísticas municipales.")
+    st.subheader("📊 Estadísticas de Sabadell - Idescat")
+    st.json(datos["idescat"])
 
-st.subheader("🎉 Eventos Públicos y Actividades")
-if datos["eventos"] is not None and not datos["eventos"].empty:
-    st.dataframe(datos["eventos"][["nom", "data_inici", "lloc", "adreca"]].head(10))
-else:
-    st.info("Sin eventos registrados actualmente.")
+if datos["amb"]:
+    st.subheader("🚌 Transporte público - AMB")
+    st.json(datos["amb"])
 
-st.subheader("📚 Catálogo de Datos Abiertos")
-if datos["catalogo"]:
-    for ds in datos["catalogo"][:5]:
-        st.markdown(f"🔗 [{ds}](https://opendata-ajuntament.sabadell.cat/data/dataset/{ds})")
-else:
-    st.info("No se pudo mostrar el catálogo de datasets.")
-
-# -----------------------------
-# MAPA DE UBICACIONES (Ejemplo)
-# -----------------------------
-
-st.subheader("🗺️ Mapa interactivo de Sabadell")
-m = folium.Map(location=[41.5463, 2.1086], zoom_start=13)
-
-if datos["aire"] is not None:
-    for _, row in datos["aire"].iterrows():
-        try:
-            lat = float(row["latitud"])
-            lon = float(row["longitud"])
-            folium.Marker(location=[lat, lon], tooltip=f"{row['magnitud']} - {row['valor']} {row['unitats']}").add_to(m)
-        except:
-            continue
-
-st_folium(m, width=1000, height=500)
+if datos["datosgob"]:
+    st.subheader("📚 Catálogo de datos - datos.gob.es")
+    st.json(datos["datosgob"])
