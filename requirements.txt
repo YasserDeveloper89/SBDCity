@@ -7,3 +7,4 @@ fpdf
 python-docx
 requests
 folium
+streamlit-folium
