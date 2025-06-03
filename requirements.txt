@@ -1,10 +1,6 @@
 streamlit
-pandas
+pytube
+moviepy
+librosa
 numpy
-scikit-learn
-plotly
-fpdf
-python-docx
-requests
-folium
-streamlit-folium
+scipy
